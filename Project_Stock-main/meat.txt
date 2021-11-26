@@ -2,3 +2,4 @@ pork  20
 dog 10
 fish 3
 ftfg 58
+ghfdgh 50
