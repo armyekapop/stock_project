@@ -1,4 +1,5 @@
 import datetime
+import pickle
 
 class LinkedList:
     class Node :
@@ -113,14 +114,18 @@ class Stock:
                 def __init__(self, name, amount, addDate=None):
                     self.name = name
                     self.amount = amount
-                    self.expDays = None
+                    self.remainingExpHour = None
                     if addDate is None:
                         self.addDate = datetime.datetime.now()
                     else:
                         self.addDate = addDate
 
-            def __init__(self, name, items = None):
+            def __init__(self, name, expHour = None, items = None):
                 self.name = name
+                if expHour == None:
+                    self.expHour = None
+                else:
+                    self.expHour = expHour
                 if items == None:
                     self.items = Queue()
                 else:
@@ -128,11 +133,21 @@ class Stock:
                     for ele in items:
                         self.items.enQueue(ele)
             
-            def addItem(self, name, amount , addDate = None):
+            def calculateRemainingExpHour(self, date):
+                remainingExpHour = self.expHour - (datetime.datetime.now() - date).total_seconds()/3600
+                return remainingExpHour
+            
+            def updateRemainingExpHour(self):
+                for i in range(len(self.items)):
+                    self.items.items.nodeAt(i).data.remainingExpHour = self.calculateRemainingExpHour(self.items.items.nodeAt(i).data.addDate)
+
+            def addItem(self, amount , addDate = None):
                 if(addDate is None): 
-                    self.items.enQueue(Stock.Category.Type.Item(name, amount))
+                    self.items.enQueue(Stock.Category.Type.Item(self.name, amount))
+                    self.updateRemainingExpHour()
                 else:
-                    self.items.enQueue(Stock.Category.Type.Item(name, amount, addDate))
+                    self.items.enQueue(Stock.Category.Type.Item(self.name, amount, addDate))
+                    self.updateRemainingExpHour()
 
             def getItem(self, name):
                 for ele in self.items:
@@ -145,49 +160,40 @@ class Stock:
                     out = 'Items in ' + self.name + ' : '
                     for i in range(len(self.items)):
                         val = str(self.items.items.nodeAt(i).data.name) + ' ' + str(self.items.items.nodeAt(i).data.amount)
-                        out += str(val) + ' '
+                        out += str(val) + ' ' + str(self.items.items.nodeAt(i).data.remainingExpHour) + ' '
                     return out
                 return 'Empty Category'
             
-            def removeItem(self, name):
-                if not self.items.isEmpty():
-                    for i in range(len(self.items)):
-                        if self.items.items.nodeAt(i).data.name == name:
-                            self.items.deQueue()
-                            return
-                return None
-            
-            def removeAll(self):
-                self.items = Queue()
-            
-            def getAmount(self, name):
+            def getAmount(self):
                 if not self.items.isEmpty():
                     amount = 0
                     for i in range(len(self.items)):
-                        if self.items.items.nodeAt(i).data.name == name:
-                            amount += self.items.items.nodeAt(i).data.amount
+                        amount += self.items.items.nodeAt(i).data.amount
                 return amount
             
-            def useItem(self, name, amount):
+            def clearItems(self):
+                self.items = Queue()
+            
+            def useItem(self, amount):
                 if not self.items.isEmpty():
-                    if self.getAmount(name) >= amount:
+                    if self.getAmount() >= amount:
                         while amount > 0:
                             if not self.items.isEmpty():
                                 for i in range(len(self.items)):
-                                    if self.items.items.nodeAt(i).data.name == name:
-                                        if self.items.items.nodeAt(i).data.amount > amount:
-                                            self.items.items.nodeAt(i).data.amount -= amount
-                                            amount = 0
-                                        else:
-                                            amount -= self.items.items.nodeAt(i).data.amount
-                                            print(f"{self.items.items.nodeAt(i).data.name} {self.items.items.nodeAt(i).data.addDate} out")
-                                            self.items.removeIndex(i)
-                                            break 
+                                    if self.items.items.nodeAt(i).data.amount > amount:
+                                        self.items.items.nodeAt(i).data.amount -= amount
+                                        amount = 0
+                                    else:
+                                        amount -= self.items.items.nodeAt(i).data.amount
+                                        print(f"{self.items.items.nodeAt(i).data.name} {self.items.items.nodeAt(i).data.addDate} out")
+                                        self.items.removeIndex(i)
+                                        break 
                             else:    
                                 print(f"Stock is Empty")
                                 break
                     else:
-                        print(f"Not enough {name}")
+                        print(f"Not enough")
+                self.updateRemainingExpHour()
                 return None
             
         def __init__(self, name, itemType = None):
@@ -199,11 +205,27 @@ class Stock:
                 for ele in type:
                     self.type.append(self.Type(ele))
         
-        def addType(self, name, items = None):
+        def addType(self, name, expHour = None, items = None):
             if items == None:
-                self.type.append(self.Type(name))
+                if expHour == None:
+                    self.type.append(self.Type(name))
+                else:
+                    self.type.append(self.Type(name, expHour))
             else:
-                self.type.append(self.Type(name, items))
+                if expHour == None:
+                    self.type.append(self.Type(name, items))
+                else:
+                    self.type.append(self.Type(name, expHour, items))
+        
+        def addNewType(self, name, amount, expHour):
+            self.type.append(self.Type(name, expHour))
+            self.getType(name).addItem(amount)
+
+        def removeType(self, name):
+            for i in range(len(self.type)):
+                if self.type.nodeAt(i).data.name == name:
+                    self.type.removeIndex(i)
+                    break
 
         def printType(self):
             if not self.type.isEmpty():
@@ -220,6 +242,17 @@ class Stock:
                     if self.type.nodeAt(i).data.name== name:
                         return self.type.nodeAt(i).data
             return None
+        
+        #funtion to return all the items in the stock sort by remaining exp hour as a object
+        def getDisplayItem(self):
+            if not self.type.isEmpty():
+                items = []
+                for i in range(len(self.type)):
+                    item = []
+                    item.append(self.type.nodeAt(i).data.name)
+                    item.append(self.type.nodeAt(i).data.getAmount())
+                    items.append(item)
+            return items
 
     def __init__(self, name, category = None):
         self.name = name
@@ -252,20 +285,61 @@ class Stock:
             return out
         return 'Empty Category'
 
+    #funtion to return all the items in the stock sort by remaining exp hour as a object
+    def getDisplayItem(self):
+        if not self.category.isEmpty():
+            stock = []
+            for i in range(len(self.category)):
+                if not self.category.nodeAt(i).data.type.isEmpty():
+                    for j in range(len(self.category.nodeAt(i).data.type)):
+                        if not self.category.nodeAt(i).data.type.nodeAt(j).data.items.isEmpty():
+                            for k in range(len(self.category.nodeAt(i).data.type.nodeAt(j).data.items)):
+                                item = []
+                                item.append(self.category.nodeAt(i).data.type.nodeAt(j).data.items.items.nodeAt(k).data.name)
+                                item.append(self.category.nodeAt(i).data.type.nodeAt(j).data.items.items.nodeAt(k).data.amount)
+                                item.append(self.category.nodeAt(i).data.type.nodeAt(j).data.items.items.nodeAt(k).data.remainingExpHour)
+                                stock.append(item)
+                        else:
+                            continue
+                else:
+                    continue
+            return stock
+        return None
+    
+
+def saveStock(stock):
+    stock_pickle = open('stock.pkl', 'wb')
+    pickle.dump(stock, stock_pickle)
+    stock_pickle.close()
+
+def loadStock():
+    stock_pickle = open('stock.pkl', 'rb')
+    stock = pickle.load(stock_pickle)
+    stock_pickle.close()
+    return stock
+       
+
 
 s = Stock('stock1')
 s.addCategory('Meat')
-s.getCategory('Meat').addType('pork')
-s.getCategory('Meat').getType('pork').addItem('pork1', 10)
-s.getCategory('Meat').getType('pork').addItem('pork1', 10)
-print(s.printCategory())
-print(s.getCategory('Meat').getType('pork').printItems())
-s.getCategory('Meat').getType('pork').useItem('pork1', 15)
-print(s.getCategory('Meat').getType('pork').printItems())
-
-
-item = []
-q = []
+#s.getCategory('Meat').addType('pork')
+s.getCategory('Meat').addNewType('pork',10,24)
+s.getCategory('Meat').getType('pork').addItem(10)
+s.getCategory('Meat').getType('pork').addItem(20)
+s.getCategory('Meat').addNewType('chicken',10,24)
+# s.getCategory('Meat').getType('chicken').addItem(30)
+#s.getCategory('Meat').getType('pork').addItem('pork1', 10)
+#print(s.printCategory())
+#print(s.getCategory('Meat').getType('pork').printItems())
+#s.getCategory('Meat').getType('pork').useItem(15)
+#print(s.getCategory('Meat').getType('pork').printItems())
+# print(s.getDisplayItem())
+# print(s.getCategory('Meat').getDisplayItem())
+saveStock(s)
+ss = loadStock()
+print(ss.getDisplayItem())
+# item = []
+# q = []
     
 
 # while True:
